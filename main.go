@@ -11,12 +11,20 @@ func main() {
 
 	file := "/Users/koryd/img_urls.txt"
 
-	out := make(chan string, 20)
-	halt := make(chan string, 20)
+	halt := make(chan int, 20)
+	defer close(halt)
 	//var utl string
-	imagezip.ReadImageFile(file, out, halt)
+	out, err := imagezip.ReadImageFile(file, halt)
 
-	go imagezip.GetImages(out)
+	if err != nil {
+		fmt.Println("There was an error", err)
+		return
+	}
+
+	tex := imagezip.GetImages(out)
+	fmt.Println("main done with getimages")
+
+	imagezip.WriteZip(tex)
 
 	<-time.After(10 * time.Second)
 
