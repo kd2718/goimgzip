@@ -9,7 +9,7 @@ import (
 func main() {
 	fmt.Println("Heyyyy")
 
-	file := "/Users/koryd/img_urls.txt"
+	file := "input/img_urls.txt"
 
 	halt := make(chan int, 20)
 	defer close(halt)
@@ -26,7 +26,7 @@ func main() {
 
 	imagezip.WriteZip(tex)
 
-	<-time.After(10 * time.Second)
+	<-time.After(30 * time.Second)
 
 	//for {
 	//	select{

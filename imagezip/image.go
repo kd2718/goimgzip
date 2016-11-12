@@ -1,12 +1,15 @@
 package imagezip
 
-import "io"
+import (
+
+)
+import "net/http"
 
 type ByteImage struct {
-	io.Reader
+	resp *http.Response
 }
 
-func NewByteImage(reader io.Reader) ByteImage {
+func NewByteImage(reader *http.Response) ByteImage {
 	bi := ByteImage{
 		reader,
 	}
