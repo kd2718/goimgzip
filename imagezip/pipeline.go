@@ -1,18 +1,21 @@
 package imagezip
 
 import (
-	"compress/gzip"
+	_ "compress/gzip"
 	"errors"
 	"fmt"
 	//"io/ioutil"
+	_ "archive/tar"
+	"bufio"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
-	"bufio"
-	"io/ioutil"
-	"io"
+	"archive/zip"
+	"sync"
 )
 
-func ReadImageFile(filepath string, halt chan int) (chan string, error) {
+func ReadImageFile(filepath string, halt chan int, wg *sync.WaitGroup) (chan string, error) {
 
 	out_chan := make(chan string, 20)
 
@@ -26,8 +29,8 @@ func ReadImageFile(filepath string, halt chan int) (chan string, error) {
 	//lines := strings.Split(string(fid), "\n")
 
 	for {
-	 	line, _,  err := lines.ReadLine()
-		 strLine := string(line)
+		line, _, err := lines.ReadLine()
+		strLine := string(line)
 		if err != nil {
 			fmt.Println("end of file...")
 			break
@@ -37,12 +40,11 @@ func ReadImageFile(filepath string, halt chan int) (chan string, error) {
 			fmt.Println("Halt detected")
 			return out_chan, errors.New("Halted...")
 		default:
-			fmt.Println("Get the good stuff")
 			go func() {
-				fmt.Println("myline", strLine)
 				if strLine == "" {
 					return
 				}
+				wg.Add(1)
 				out_chan <- strLine
 				return
 			}()
@@ -57,64 +59,97 @@ func GetImages(out chan string) chan ByteImage {
 	tex := make(chan ByteImage, 10)
 	go func() {
 		for url := range out {
-			go func() {
+			go func(url string) {
 				resp, err := http.Get(url)
 				if err != nil {
 					fmt.Println("error in get images", err)
 					return
 				}
+				fid, err := ioutil.TempFile("out/", "image_")
+				defer fid.Close()
+				if err != nil {
+					fmt.Println("err creating temp file", err)
+				}
+
 				fmt.Println("stats", resp.Status)
 				//defer resp.Body.Close()
-				blobImage := NewByteImage(resp)
+				_, err = io.Copy(fid, resp.Body)
+				if err != nil {
+					fmt.Println("error copy body to temp file", err)
+					os.Remove(fid.Name())
+				}
+				blobImage := NewByteImage(fid.Name())
 
 				if err != nil {
 					fmt.Println("read error", err)
 				}
-				fmt.Println("Writing to chan")
 				tex <- blobImage
 				return
-			}()
+			}(url)
 		}
 	}()
 	return tex
 }
 
-func WriteZip(tex chan ByteImage) {
+func WriteZip(tex chan ByteImage, wg *sync.WaitGroup) *zip.Writer {
 	fmt.Println("time to write the zip")
+	wg.Done()
 
 	my_file, err := os.Create("out/test.zip")
 	if err != nil {
 		fmt.Println("good stuff... not", err)
 	}
-	defer my_file.Close()
-	w, _ := gzip.NewWriterLevel(my_file, gzip.NoCompression)
-	defer w.Close()
-	idx := 1
+	//tw := tar.NewWriter(my_file)
+	tw := zip.NewWriter(my_file)
+
+	//defer my_file.Close()
 
 	go func() {
 		for blob := range tex {
-			go func() {
-				fid, err := ioutil.TempFile("out/", "image_")
 
-				defer os.Remove(fid.Name())
-				defer fid.Close()
-				car := io.Rea(blob.resp.Body)
+			defer os.Remove(blob.file_name)
+			//defer blob.resp.Close()
 
-				copied, err := w.Write(car)
+			myfile, err := os.Open(blob.file_name)
+			if err != nil {
+				fmt.Println("errer open tempfile", err)
+			}
 
-				//copied, err := io.Copy(w, blob.resp.Body)
-				if err != nil {
-					fmt.Println("err is not nill!!!", err)
-				}
-				fmt.Println("copied:", copied)
-				//w.
-				defer blob.resp.Body.Close()
+			wr, err := tw.Create(blob.file_name)
+			if err != nil {
+				fmt.Println("error creating thing", err)
+			}
 
-				w.Flush()
+			io.Copy(wr, myfile)
+			wg.Done()
 
-				idx++
-			}()
+
+			//fstat, err := myfile.Stat()
+			//if err != nil {
+			//	fmt.Println("there was an error", err)
+			//}
+			//header, err := tar.FileInfoHeader(fstat, blob.file_name)
+			//if err != nil {
+			//	fmt.Println("err or in fileinfoheardr", err)
+			//}
+			//
+			//fmt.Println("File header info:", header)
+			//
+			//tw.WriteHeader(header)
+			//temp, err := ioutil.ReadAll(blob.resp)
+			//if err != nil {
+			//	fmt.Println("error reading file", err)
+			//}
+			//
+			//_, err = tw.Write(temp)
+			//if err != nil {
+			//	fmt.Println("error write", err)
+			//}
+
+			//io.Copy(tw, myfile)
+			//tw.Flush()
+
 		}
 	}()
+	return tw
 }
-
