@@ -2,5 +2,6 @@
 .DS_Store
 out/
 
-out/
-py_out/
+out/*
+py_out/*
+!.placeholder
