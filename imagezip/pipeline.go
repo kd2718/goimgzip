@@ -107,7 +107,6 @@ func WriteZip(tex chan ByteImage, wg *sync.WaitGroup) *zip.Writer {
 	go func() {
 		for blob := range tex {
 
-			defer os.Remove(blob.file_name)
 			//defer blob.resp.Close()
 
 			myfile, err := os.Open(blob.file_name)
@@ -122,6 +121,9 @@ func WriteZip(tex chan ByteImage, wg *sync.WaitGroup) *zip.Writer {
 
 			io.Copy(wr, myfile)
 			wg.Done()
+			myfile.Close()
+			os.Remove(myfile.Name())
+
 
 
 			//fstat, err := myfile.Stat()
